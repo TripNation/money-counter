@@ -19,6 +19,27 @@ intents.members = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
 
+def is_owner_or_has_role(user: discord.User | discord.Member, guild: discord.Guild) -> bool:
+    """
+    Checks if the user is:
+    1. The actual Server Owner
+    2. Has a role named 'Owner' (case-insensitive)
+    3. Has Administrator permissions
+    """
+    if not guild or not isinstance(user, discord.Member):
+        return False
+    # Check 1: Actual Server Owner
+    if user.id == guild.owner_id:
+        return True
+    # Check 2: Has a role named 'Owner'
+    if any(role.name.lower() == "owner" for role in user.roles):
+        return True
+    # Check 3: Has Administrator permission
+    if user.guild_permissions.administrator:
+        return True
+    return False
+
+
 def build_card_file(data: dict, subtitle: str = None) -> discord.File:
     """Generates the clean card image with green progress bar."""
     goal = float(data.get("goal", 500.0))
@@ -119,6 +140,10 @@ class UpdateGoalModal(discord.ui.Modal, title="Update Goal Target"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can update the goal.", ephemeral=True)
+            return
+
         try:
             new_goal = float(self.goal_input.value.replace("$", "").replace(",", "").strip())
         except ValueError:
@@ -150,6 +175,10 @@ class AddCashAmountModal(discord.ui.Modal):
         self.add_item(self.amount_input)
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can add cash.", ephemeral=True)
+            return
+
         try:
             amt = float(self.amount_input.value.replace("$", "").replace(",", "").strip())
         except ValueError:
@@ -193,6 +222,10 @@ class SetCashModal(discord.ui.Modal, title="Set Current Cash Value"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can set cash.", ephemeral=True)
+            return
+
         try:
             new_val = float(self.amount_input.value.replace("$", "").replace(",", "").strip())
         except ValueError:
@@ -218,11 +251,17 @@ class MemberSelectView(discord.ui.View):
 
     @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Search & select member (type name to filter)...")
     async def user_select(self, interaction: discord.Interaction, select: discord.ui.UserSelect):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can use this.", ephemeral=True)
+            return
         selected_member = select.values[0]
         await interaction.response.send_modal(AddCashAmountModal(member=selected_member))
 
     @discord.ui.button(label="Skip Member (Anonymous / Manual)", style=discord.ButtonStyle.secondary)
     async def skip_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can use this.", ephemeral=True)
+            return
         await interaction.response.send_modal(AddCashAmountModal(member=None))
 
 
@@ -232,10 +271,16 @@ class UpdateMenuView(discord.ui.View):
 
     @discord.ui.button(label="🎯 Update Goal Amount", style=discord.ButtonStyle.primary, emoji="🎯")
     async def update_goal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can use this.", ephemeral=True)
+            return
         await interaction.response.send_modal(UpdateGoalModal())
 
     @discord.ui.button(label="➕ Add Cash (Tag Member)", style=discord.ButtonStyle.success, emoji="💵")
     async def add_cash_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can use this.", ephemeral=True)
+            return
         await interaction.response.send_message(
             "Select or search for the member who contributed:",
             view=MemberSelectView(),
@@ -244,6 +289,9 @@ class UpdateMenuView(discord.ui.View):
 
     @discord.ui.button(label="✏️ Set Exact Cash", style=discord.ButtonStyle.secondary, emoji="✏️")
     async def set_cash_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_owner_or_has_role(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ Only the Server Owner or members with the Owner role can use this.", ephemeral=True)
+            return
         await interaction.response.send_modal(SetCashModal())
 
 
@@ -270,11 +318,20 @@ async def on_ready():
 
 
 # ==========================================
-# THE ONLY TWO COMMANDS (/assignserver & /update)
+# COMMANDS (RESTRICTED TO OWNER & OWNER ROLE)
 # ==========================================
 
 @bot.tree.command(name="assignserver", description="Post the official Goal Message in this channel and link it.")
+@app_commands.default_permissions(administrator=True)
 async def slash_assignserver(interaction: discord.Interaction):
+    # Permission Check
+    if not is_owner_or_has_role(interaction.user, interaction.guild):
+        await interaction.response.send_message(
+            "❌ Only the **Server Owner** or members with the **Owner** role can use this command.",
+            ephemeral=True
+        )
+        return
+
     data = storage.get_data()
     card_file = build_card_file(data)
     
@@ -284,7 +341,16 @@ async def slash_assignserver(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="update", description="Open the menu to update Goal or add Cash with searchable member picker.")
+@app_commands.default_permissions(administrator=True)
 async def slash_update(interaction: discord.Interaction):
+    # Permission Check
+    if not is_owner_or_has_role(interaction.user, interaction.guild):
+        await interaction.response.send_message(
+            "❌ Only the **Server Owner** or members with the **Owner** role can use this command.",
+            ephemeral=True
+        )
+        return
+
     view = UpdateMenuView()
     await interaction.response.send_message("Select an option to update:", view=view, ephemeral=True)
 
@@ -295,6 +361,9 @@ async def slash_update(interaction: discord.Interaction):
 
 @bot.command(name="assignserver")
 async def cmd_assignserver(ctx: commands.Context):
+    if not is_owner_or_has_role(ctx.author, ctx.guild):
+        await ctx.send("❌ Only the **Server Owner** or members with the **Owner** role can use this command.")
+        return
     data = storage.get_data()
     card_file = build_card_file(data)
     msg = await ctx.send(file=card_file)
@@ -303,6 +372,9 @@ async def cmd_assignserver(ctx: commands.Context):
 
 @bot.command(name="update")
 async def cmd_update(ctx: commands.Context):
+    if not is_owner_or_has_role(ctx.author, ctx.guild):
+        await ctx.send("❌ Only the **Server Owner** or members with the **Owner** role can use this command.")
+        return
     view = UpdateMenuView()
     await ctx.send("Select an option to update:", view=view)
 
