@@ -21,22 +21,19 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
 def is_owner_or_has_role(user: discord.User | discord.Member, guild: discord.Guild) -> bool:
     """
-    Checks if the user is:
-    1. The actual Server Owner
-    2. Has a role named 'Owner' (case-insensitive)
-    3. Has Administrator permissions
+    Strictly allows ONLY:
+    1. The literal Server Owner
+    2. Users with a role specifically named 'Owner'
     """
     if not guild or not isinstance(user, discord.Member):
         return False
     # Check 1: Actual Server Owner
     if user.id == guild.owner_id:
         return True
-    # Check 2: Has a role named 'Owner'
-    if any(role.name.lower() == "owner" for role in user.roles):
-        return True
-    # Check 3: Has Administrator permission
-    if user.guild_permissions.administrator:
-        return True
+    # Check 2: Has a role named 'Owner' (case-insensitive)
+    for role in user.roles:
+        if role.name.strip().lower() == "owner":
+            return True
     return False
 
 
@@ -383,4 +380,19 @@ if __name__ == "__main__":
     if not TOKEN:
         print("ERROR: DISCORD_TOKEN is missing!", flush=True)
         exit(1)
-    bot.run(TOKEN)
+
+    wheel_token = os.getenv("WHEEL_BOT_TOKEN")
+    if wheel_token:
+        print("[Combined Launcher] WHEEL_BOT_TOKEN detected! Starting both Money Counter and Wheel of Pep bots...", flush=True)
+        import asyncio
+        from wheel_bot import wheel_bot
+
+        async def run_both_bots():
+            await asyncio.gather(
+                bot.start(TOKEN),
+                wheel_bot.start(wheel_token)
+            )
+
+        asyncio.run(run_both_bots())
+    else:
+        bot.run(TOKEN)
