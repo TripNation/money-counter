@@ -22,6 +22,27 @@ COLOR_WARNING = 0xFEE75C
 COLOR_SPIN = 0xEB459E
 COLOR_ERROR = 0xED4245
 
+# Whitelisted User IDs authorized to manage the wheel
+AUTHORIZED_USERS = {
+    879477525879857202,   # TripNation
+    1462829122769125417,  # Hector-PEP Man
+    270679104620068864,   # Madytiggs
+    532144104688320512,   # Tara
+}
+
+def is_authorized_user(user: discord.User | discord.Member, guild: discord.Guild = None) -> bool:
+    if not user:
+        return False
+    if user.id in AUTHORIZED_USERS:
+        return True
+    if guild and user.id == guild.owner_id:
+        return True
+    if hasattr(user, "roles"):
+        for role in user.roles:
+            if role.name.strip().lower() == "owner":
+                return True
+    return False
+
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
@@ -98,14 +119,14 @@ async def on_ready():
         check_signups_task.start()
 
     try:
-        synced = await wheel_bot.tree.sync()
-        logger.info(f"Successfully synced {len(synced)} application slash commands.")
         for guild in wheel_bot.guilds:
             try:
-                wheel_bot.tree.copy_global_to(guild=guild)
+                wheel_bot.tree.clear_commands(guild=guild)
                 await wheel_bot.tree.sync(guild=guild)
             except Exception:
                 pass
+        synced = await wheel_bot.tree.sync()
+        logger.info(f"Successfully synced {len(synced)} application slash commands cleanly.")
     except Exception as e:
         logger.error(f"Failed to sync slash commands: {e}")
 
@@ -266,7 +287,6 @@ async def execute_wheel_spin(
 # -------------------------------------------------------------
 
 @wheel_bot.tree.command(name="signup", description="Start a wheel signup message with a duration timer")
-@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(
     duration="How long the signup lasts (e.g. 30m, 1h, 1d, 2 hours)",
     title="Custom title/topic for the wheel spin (optional)"
@@ -278,6 +298,10 @@ async def slash_signup(
 ):
     if not interaction.guild:
         await interaction.response.send_message("❌ This command must be used in a server.", ephemeral=True)
+        return
+
+    if not is_authorized_user(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ You are not authorized to start a wheel signup.", ephemeral=True)
         return
 
     sec = parse_duration(duration)
@@ -322,7 +346,6 @@ async def slash_signup(
     )
 
 @wheel_bot.tree.command(name="spin", description="Spin the wheel! Pick a winner from entered participants or server members")
-@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(
     source="Who to spin: 'entries' for people who signed up, or 'server' for everyone in the server"
 )
@@ -334,6 +357,10 @@ async def slash_spin(
         await interaction.response.send_message("❌ This command must be used in a server.", ephemeral=True)
         return
 
+    if not is_authorized_user(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ You are not authorized to spin the wheel.", ephemeral=True)
+        return
+
     await interaction.response.defer()
 
     async def send_fn(**kwargs):
@@ -342,10 +369,13 @@ async def slash_spin(
     await execute_wheel_spin(send_fn, interaction.guild, source=source)
 
 @wheel_bot.tree.command(name="reset", description="Reset the wheel and clear all entered names")
-@app_commands.default_permissions(manage_guild=True)
 async def slash_reset(interaction: discord.Interaction):
     if not interaction.guild:
         await interaction.response.send_message("❌ This command must be used in a server.", ephemeral=True)
+        return
+
+    if not is_authorized_user(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ You are not authorized to reset the wheel.", ephemeral=True)
         return
 
     cleared = WheelStorage.clear_entries(interaction.guild_id)
@@ -386,11 +416,14 @@ async def slash_entries(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @wheel_bot.tree.command(name="wheel_add", description="Manually add a user to the wheel")
-@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(user="The member to add to the wheel")
 async def slash_wheel_add(interaction: discord.Interaction, user: discord.Member):
     if not interaction.guild:
         await interaction.response.send_message("❌ Server only.", ephemeral=True)
+        return
+
+    if not is_authorized_user(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ You are not authorized to manage wheel entries.", ephemeral=True)
         return
 
     added = WheelStorage.add_entry(interaction.guild_id, user.id, user.display_name)
@@ -401,11 +434,14 @@ async def slash_wheel_add(interaction: discord.Interaction, user: discord.Member
         await interaction.response.send_message(f"ℹ️ **{user.display_name}** is already on the wheel. (Total: {total})")
 
 @wheel_bot.tree.command(name="wheel_remove", description="Manually remove a user from the wheel")
-@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(user="The member to remove from the wheel")
 async def slash_wheel_remove(interaction: discord.Interaction, user: discord.Member):
     if not interaction.guild:
         await interaction.response.send_message("❌ Server only.", ephemeral=True)
+        return
+
+    if not is_authorized_user(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ You are not authorized to manage wheel entries.", ephemeral=True)
         return
 
     removed = WheelStorage.remove_entry(interaction.guild_id, user.id)

@@ -19,21 +19,36 @@ intents.members = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 
 
-def is_owner_or_has_role(user: discord.User | discord.Member, guild: discord.Guild) -> bool:
+# Whitelisted User IDs authorized to use admin commands
+AUTHORIZED_USERS = {
+    879477525879857202,   # TripNation
+    1462829122769125417,  # Hector-PEP Man
+    270679104620068864,   # Madytiggs
+    532144104688320512,   # Tara
+}
+
+def is_owner_or_has_role(user: discord.User | discord.Member, guild: discord.Guild = None) -> bool:
     """
-    Strictly allows ONLY:
-    1. The literal Server Owner
-    2. Users with a role specifically named 'Owner'
+    Allows:
+    1. Specifically authorized user IDs (TripNation, Hector, Madytiggs, Tara)
+    2. The literal Server Owner
+    3. Users with a role specifically named 'Owner'
     """
+    if not user:
+        return False
+    # Check 1: Whitelisted User ID
+    if user.id in AUTHORIZED_USERS:
+        return True
     if not guild or not isinstance(user, discord.Member):
         return False
-    # Check 1: Actual Server Owner
+    # Check 2: Actual Server Owner
     if user.id == guild.owner_id:
         return True
-    # Check 2: Has a role named 'Owner' (case-insensitive)
-    for role in user.roles:
-        if role.name.strip().lower() == "owner":
-            return True
+    # Check 3: Has a role named 'Owner' (case-insensitive)
+    if hasattr(user, "roles"):
+        for role in user.roles:
+            if role.name.strip().lower() == "owner":
+                return True
     return False
 
 
@@ -306,15 +321,15 @@ async def on_ready():
         print(f"[KeepAlive] {e}", flush=True)
 
     try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} global slash commands.", flush=True)
+        # Clear any guild-specific duplicates so commands only appear once
         for guild in bot.guilds:
             try:
-                bot.tree.copy_global_to(guild=guild)
+                bot.tree.clear_commands(guild=guild)
                 await bot.tree.sync(guild=guild)
-                print(f"Instantly synced commands to {guild.name}", flush=True)
-            except Exception as ge:
+            except Exception:
                 pass
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} slash commands cleanly.", flush=True)
     except Exception as e:
         print(f"Sync error: {e}", flush=True)
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="goal | /update"))
@@ -326,8 +341,11 @@ async def on_ready():
 # ==========================================
 
 @bot.tree.command(name="assignserver", description="Post the official Goal Message in this channel and link it.")
-@app_commands.default_permissions(manage_guild=True)
 async def slash_assignserver(interaction: discord.Interaction):
+    if not is_owner_or_has_role(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ You are not authorized to use this command.", ephemeral=True)
+        return
+
     data = storage.get_data()
     card_file = build_card_file(data)
     
@@ -337,8 +355,11 @@ async def slash_assignserver(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="update", description="Open the menu to update Goal or add Cash with searchable member picker.")
-@app_commands.default_permissions(manage_guild=True)
 async def slash_update(interaction: discord.Interaction):
+    if not is_owner_or_has_role(interaction.user, interaction.guild):
+        await interaction.response.send_message("❌ You are not authorized to use this command.", ephemeral=True)
+        return
+
     view = UpdateMenuView()
     await interaction.response.send_message("Select an option to update:", view=view, ephemeral=True)
 
