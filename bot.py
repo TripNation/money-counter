@@ -307,7 +307,14 @@ async def on_ready():
 
     try:
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} slash commands.", flush=True)
+        print(f"Synced {len(synced)} global slash commands.", flush=True)
+        for guild in bot.guilds:
+            try:
+                bot.tree.copy_global_to(guild=guild)
+                await bot.tree.sync(guild=guild)
+                print(f"Instantly synced commands to {guild.name}", flush=True)
+            except Exception as ge:
+                pass
     except Exception as e:
         print(f"Sync error: {e}", flush=True)
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="goal | /update"))
@@ -319,16 +326,8 @@ async def on_ready():
 # ==========================================
 
 @bot.tree.command(name="assignserver", description="Post the official Goal Message in this channel and link it.")
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 async def slash_assignserver(interaction: discord.Interaction):
-    # Permission Check
-    if not is_owner_or_has_role(interaction.user, interaction.guild):
-        await interaction.response.send_message(
-            "❌ Only the **Server Owner** or members with the **Owner** role can use this command.",
-            ephemeral=True
-        )
-        return
-
     data = storage.get_data()
     card_file = build_card_file(data)
     
@@ -338,16 +337,8 @@ async def slash_assignserver(interaction: discord.Interaction):
 
 
 @bot.tree.command(name="update", description="Open the menu to update Goal or add Cash with searchable member picker.")
-@app_commands.default_permissions(administrator=True)
+@app_commands.default_permissions(manage_guild=True)
 async def slash_update(interaction: discord.Interaction):
-    # Permission Check
-    if not is_owner_or_has_role(interaction.user, interaction.guild):
-        await interaction.response.send_message(
-            "❌ Only the **Server Owner** or members with the **Owner** role can use this command.",
-            ephemeral=True
-        )
-        return
-
     view = UpdateMenuView()
     await interaction.response.send_message("Select an option to update:", view=view, ephemeral=True)
 

@@ -100,6 +100,12 @@ async def on_ready():
     try:
         synced = await wheel_bot.tree.sync()
         logger.info(f"Successfully synced {len(synced)} application slash commands.")
+        for guild in wheel_bot.guilds:
+            try:
+                wheel_bot.tree.copy_global_to(guild=guild)
+                await wheel_bot.tree.sync(guild=guild)
+            except Exception:
+                pass
     except Exception as e:
         logger.error(f"Failed to sync slash commands: {e}")
 
@@ -260,6 +266,7 @@ async def execute_wheel_spin(
 # -------------------------------------------------------------
 
 @wheel_bot.tree.command(name="signup", description="Start a wheel signup message with a duration timer")
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(
     duration="How long the signup lasts (e.g. 30m, 1h, 1d, 2 hours)",
     title="Custom title/topic for the wheel spin (optional)"
@@ -315,6 +322,7 @@ async def slash_signup(
     )
 
 @wheel_bot.tree.command(name="spin", description="Spin the wheel! Pick a winner from entered participants or server members")
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(
     source="Who to spin: 'entries' for people who signed up, or 'server' for everyone in the server"
 )
@@ -334,6 +342,7 @@ async def slash_spin(
     await execute_wheel_spin(send_fn, interaction.guild, source=source)
 
 @wheel_bot.tree.command(name="reset", description="Reset the wheel and clear all entered names")
+@app_commands.default_permissions(manage_guild=True)
 async def slash_reset(interaction: discord.Interaction):
     if not interaction.guild:
         await interaction.response.send_message("❌ This command must be used in a server.", ephemeral=True)
@@ -377,6 +386,7 @@ async def slash_entries(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 @wheel_bot.tree.command(name="wheel_add", description="Manually add a user to the wheel")
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(user="The member to add to the wheel")
 async def slash_wheel_add(interaction: discord.Interaction, user: discord.Member):
     if not interaction.guild:
@@ -391,6 +401,7 @@ async def slash_wheel_add(interaction: discord.Interaction, user: discord.Member
         await interaction.response.send_message(f"ℹ️ **{user.display_name}** is already on the wheel. (Total: {total})")
 
 @wheel_bot.tree.command(name="wheel_remove", description="Manually remove a user from the wheel")
+@app_commands.default_permissions(manage_guild=True)
 @app_commands.describe(user="The member to remove from the wheel")
 async def slash_wheel_remove(interaction: discord.Interaction, user: discord.Member):
     if not interaction.guild:
